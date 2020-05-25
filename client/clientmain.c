@@ -8,21 +8,48 @@
 #include <arpa/inet.h> 
 #include <netinet/in.h> 
 #include <sys/stat.h>
+#include "cmdLineOpts.h"
+#include "fileList.h"
 
-#define PORT	 8080 
-#define MAXLINE 1024 
-
-// Driver code 
 int main(int argc, char *argv[])
 { 
     int sockfd; 
-    char svrIp[18];
-    char fileName[132];
     int fileSize;
+    int indx;
+    int argLen;
+    int optNum;
+    int optSel;
+    int optErr;
     struct stat st;
     char *msgBuf;
+    char svrIp[18];
+    int svrPort;
     struct sockaddr_in	 servaddr; 
     FILE *fptr;
+    char fileName[132];
+    char fileNames[100][132];
+
+    printf("\n\nUdpXmt - Linux UDP client file transmitter v20200522\n\n");
+    if (argc < 2)
+    {
+        printf("switches (preceded by - or / and followed by blank)\n");
+        printf("  -a  char[] ip address of server\n");
+        printf("  -p  int    destination server port\n");
+        printf("  -f  char[] name of file to be sent, if name is preceded by @,\n");
+        printf("             the file contains a list of files to be sent.\n");
+        printf("  Example: UdpXmt -a 192.168.1.29 12111 @fileList.txt");
+        return 0;
+    }
+    ReadCmdLine(argc, argv);
+    GetSvrIp(svrIp);
+    svrPort = GetSvrPort();
+    servaddr.sin_port = htons(svrPort);
+    GetFileName(fileName);
+    printf("\noptions:\n"
+            "  Server address: %s\n"
+            "            port: %d\n"
+            "  File          : %s\n",
+            svrIp, svrPort, fileName);
 
     // Creating socket file descriptor 
     if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
@@ -32,27 +59,20 @@ int main(int argc, char *argv[])
     memset(&servaddr, 0, sizeof(servaddr)); 
     // Filling server information 
     servaddr.sin_family = AF_INET; 
-    servaddr.sin_port = htons(PORT); 
-    if (argc > 1)
-    {
-        strcpy(svrIp, argv[1]);
-    }
-    else
-    {
-        strcpy(svrIp, "127.0.0.1");     // local loopback
-    }
     servaddr.sin_addr.s_addr = inet_addr(svrIp);
 
-    int n, len; 
+    int nFiles = ReadFileList(fileName);
+    int iFile;
     // send files to server until name length is 0
-    while(1)
+    for (iFile=0; iFile<nFiles; iFile++)
     {
-        printf("Enter file name : ");
-        scanf("%s" , fileName);
-        if (strlen(fileName) == 0)
-        {
-            break;
-        }
+        GetNextFileName(fileName);
+        // printf("Enter file name : ");
+        // scanf("%s" , fileName);
+        // if (strlen(fileName) == 0)
+        // {
+        //     break;
+        // }
         stat(fileName, &st);
         fileSize = st.st_size;
         msgBuf = malloc(fileSize * sizeof(char));
@@ -75,3 +95,9 @@ int main(int argc, char *argv[])
     close(sockfd); 
     return 0; 
 } 
+
+int getFileList(char *fileName[1], char *fileNames[])
+{
+    int nFiles = 0;
+    return nFiles;
+}
