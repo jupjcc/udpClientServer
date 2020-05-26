@@ -7,9 +7,9 @@
 			"command": "/usr/bin/gcc",
 			"args": [
 				"-g",
-				"${file}",
+				"${workspaceFolder}/*.c",
 				"-o",
-				"${workspaceFolder}/bin/server"
+				"${workspaceFolder}/bin/UdpRcv"
 			],
 			"options": {
 				"cwd": "/usr/bin"
@@ -17,7 +17,10 @@
 			"problemMatcher": [
 				"$gcc"
 			],
-			"group": "build"
+			"group": {
+				"kind" : "build",
+				"isDefault" : true
+			}
 		}
 	]
 }
