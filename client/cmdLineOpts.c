@@ -27,7 +27,7 @@ void ReadCmdLine(int argc, char *argv[])
                 break;
         }
     }
-    printf("cmdLine was read\n");
+    // printf("cmdLine was read\n");
 }
 
 void GetSvrIp(char *iparg)

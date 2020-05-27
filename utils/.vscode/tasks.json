@@ -7,10 +7,9 @@
             "command": "/usr/bin/gcc",
             "args": [
                 "-g",
-                "${workspaceFolder}/*.c",
+                "${file}",
                 "-o",
-                "${workspaceFolder}/bin/UdpXmt",
-                "-lpthread"
+                "${fileDirname}/${fileBasenameNoExtension}"
             ],
             "options": {
                 "cwd": "/usr/bin"
@@ -29,10 +28,9 @@
             "command": "/usr/bin/gcc",
             "args": [
                 "-g",
-                "${workspaceFolder}/*.c",
+                "${file}",
                 "-o",
-				"${workspaceFolder}/bin/UdpXmt",
-                "-lpthread"
+                "${fileDirname}/${fileBasenameNoExtension}"
             ],
             "options": {
                 "cwd": "/usr/bin"
