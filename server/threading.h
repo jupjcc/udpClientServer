@@ -1,6 +1,7 @@
 #ifndef THREADING_H
 #define THREADING_H
 
+#include <stdint.h>
 #include <pthread.h>
 
     struct thread_info_t
@@ -15,6 +16,8 @@
         // A mutex can never be owned by two different threads simultaneously.
         // A thread attempting to lock a mutex that is already locked by another thread is suspended until the owning thread unlocks the mutex first.
         pthread_mutex_t mutex;
+        char *fileBuf;
+        uint32_t nBytes;
     };
 
     void error_pthread_mutex_unlock(const int unlock_rv);
@@ -22,7 +25,7 @@
     void error_pthread_cond_signal(const int signal_rv);
     void error_pthread_setcanceltype(const int setcanceltype_rv);
     void error_pthread_create(const int create_rv);
-    void error_pthread_cond_timedwait(const int timed_wait_rv);
+    void error_pthread_cond_wait(const int wait_rv);
     void error_pthread_join(const int join_rv);
     void error_clock_gettime(const int gettime_rv);
 

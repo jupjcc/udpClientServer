@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/bin/UdpRcv",
-            "args": [],
+            "args": ["-p","8080"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

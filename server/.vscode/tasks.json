@@ -9,7 +9,8 @@
 				"-g",
 				"${workspaceFolder}/*.c",
 				"-o",
-				"${workspaceFolder}/bin/UdpRcv"
+				"${workspaceFolder}/bin/UdpRcv",
+                "-lpthread"
 			],
 			"options": {
 				"cwd": "/usr/bin"

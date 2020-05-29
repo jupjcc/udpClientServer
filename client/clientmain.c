@@ -25,22 +25,15 @@ int main(int argc, char *argv[])
     printf("\n\nUdpXmt - Linux UDP client file transmitter v20200522\n\n");
     if (argc < 2)
     {
-        printf("switches (preceded by - or / and followed by blank)\n");
-        printf("  -a  char[] ip address of server\n");
-        printf("  -p  int    destination server port\n");
-        printf("  -f  char[] name of file to be sent, if name is preceded by @,\n");
-        printf("             the file contains a list of files to be sent.\n");
-        printf("  Example: UdpXmt -a 192.168.1.29 12111 @fileList.txt");
+        ShowCmdLineHelp();
         return 0;
     }
     ReadCmdLine(argc, argv);        // cmdLineOpts
-    SetServerAddr();                // fileSender
+    char ip[32];
+    GetSvrIp(ip);
+    printf("Sending to server @%s:%d\n", ip, GetSvrPort());
+    InitFileSender();
     GetFileName(fileName);          // cmdLineOpts
-    // printf("\noptions:\n"
-    //         "  Server address: %s\n"
-    //         "            port: %d\n"
-    //         "  File          : %s\n",
-    //         svrIp, svrPort, fileName);
 
     int nFiles = ReadFileList(fileName);    // fileList
     int iFile;
@@ -65,8 +58,8 @@ int main(int argc, char *argv[])
         fptr = fopen(fileName, "rb");
         fread(msgBuf, fileSize, 1, fptr);
 
-        printf("sending file of %d bytes:\n", fileSize);
-    
+        printf("sending file %s of %d bytes:\n",
+                fileName, fileSize);
         SendFile(msgBuf, fileSize);         // fileSender
     }
     CloseUdp(); 

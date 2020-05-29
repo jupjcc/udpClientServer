@@ -1,22 +1,38 @@
 // Server side implementation of UDP client-server model 
+#include "threading.h"
+#include "fileWriter.h"
+#include "cmdLineOpts.h"
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <unistd.h> 
+#include <errno.h>
 #include <string.h>
 #include <sys/types.h> 
 #include <sys/socket.h> 
 #include <arpa/inet.h> 
 #include <netinet/in.h> 
  
-#define PORT	 8080 
-#define MAX_UDP_PKT_LEN 8972
+static char *fileRcvBuf;
 
 // Driver code 
-int main() { 
+int main(int argc, char *argv[])
+{
+	static struct thread_info_t fwThreadInfo;	// file writer thread
+
 	int sockfd; 
 	char rcvBuf[MAX_UDP_PKT_LEN]; 
-	char *hello = "Hello from server"; 
-	struct sockaddr_in servaddr, cliaddr; 
+	struct sockaddr_in servaddr, cliaddr;
+
+
+    printf("\n\nUdpRcv - Linux UDP server file receiver v20200527\n\n");
+    if (argc < 2)
+    {
+        printf("switches (preceded by - or / and followed by blank)\n");
+        printf("  -p  int    destination server port\n");
+        printf("  Example: UdpRcv -p 8080");
+        return 0;
+    }
+    ReadCmdLine(argc, argv);        // cmdLineOpts
 	
 	// Creating socket file descriptor 
 	if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
@@ -30,7 +46,7 @@ int main() {
 	// Filling server information 
 	servaddr.sin_family = AF_INET; // IPv4 
 	servaddr.sin_addr.s_addr = INADDR_ANY; 
-	servaddr.sin_port = htons(PORT); 
+	servaddr.sin_port = htons(GetSvrPort()); 
 	
 	// Bind the socket with the server address 
 	if ( bind(sockfd, (const struct sockaddr *)&servaddr, 
@@ -39,31 +55,50 @@ int main() {
 		perror("bind failed"); 
 		exit(EXIT_FAILURE); 
 	} 
-    printf("\n\nUdpRcv - Linux UDP server file receiver v20200526\n\n");
-	printf("Server waiting for udp input at port %d\n", PORT);
+	InitFileWriter();
+	printf("Server waiting for udp input at port %d\n", GetSvrPort());
 	uint32_t msgSize;
 	uint32_t msgSeq;
 	uint32_t nMsgsTot;
-	uint32_t len, nRcv; 
+	uint32_t cliAddrLen, nRcv; 
 	char ackBuf[4];
-	len = sizeof(cliaddr); //len is returned valued 
+	cliAddrLen = sizeof(cliaddr); //cliAddrLen is returned valued 
 
-	nRcv = recvfrom(sockfd, (char *)rcvBuf, MAX_UDP_PKT_LEN,
-				MSG_WAITALL, ( struct sockaddr *) &cliaddr, 
-				&len);
-	memcpy(&msgSize, rcvBuf, 4);
-	memcpy(&msgSeq, &rcvBuf[4], 4);
-	memcpy(&nMsgsTot, &rcvBuf[8], 4);
-	if (nRcv != msgSize)
+	while (1)
 	{
-		printf("Warning: socket received %d bytes but msgSize in data is %d\n",
-			nRcv, msgSize);
-	}
-	printf("Received %d bytes, ACKing msg # %d\n", nRcv, msgSeq);
-	//  send ACK msg
-	sendto(sockfd, (const char *)&msgSeq, 4, 
-		MSG_CONFIRM, (const struct sockaddr *) &cliaddr, 
-			len); 
-	
+		nRcv = recvfrom(sockfd, (char *)rcvBuf, MAX_UDP_PKT_LEN,
+				MSG_WAITALL, ( struct sockaddr *) &cliaddr, 
+				&cliAddrLen);
+		// char addrstr[32];
+        // inet_ntop(AF_INET, &(((struct sockaddr_in *)&cliaddr)->sin_addr),
+        //             addrstr, 32);
+		// printf("incoming msg from %s\n", addrstr);
+		// nRcv = recv(sockfd, (char *)rcvBuf, MAX_UDP_PKT_LEN,
+		// 		MSG_WAITALL);
+		// printf("nRcv=%d", nRcv);
+		memcpy(&msgSize, rcvBuf, 4);
+		memcpy(&msgSeq, &rcvBuf[4], 4);
+		memcpy(&nMsgsTot, &rcvBuf[8], 4);
+		if (nRcv != msgSize)
+		{
+			printf("Warning: socket received %d bytes but msgSize in data is %d\n",
+				nRcv, msgSize);
+		}
+		else
+		{
+			//  send ACK msg
+			ssize_t nSent = sendto(sockfd, (const char *)&msgSeq, 4, 
+				MSG_CONFIRM, (const struct sockaddr *) &cliaddr, cliAddrLen);
+			printf("Received %d bytes, sent ACK of msg # %d\n", nRcv, msgSeq);
+			if (nSent < 0)
+			{
+				printf("Error sending ack, errno=%d\n", errno);
+			}
+			// Add to file writer buffer. If file is complete then use separate
+			//  thread to write it to disk.
+			AddToFwBuf(rcvBuf);
+		}
+		
+	}	
 	return 0; 
 } 
