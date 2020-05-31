@@ -1,3 +1,4 @@
+#include "udpMsgDef.h"
 #include "fileWriter.h"
 #include "threading.h"
 #include "cmdLineOpts.h"
@@ -53,7 +54,7 @@ void AddToFwBuf(char rcvBuf[])
     struct FileXfrHeader_t *udpHdr = (struct FileXfrHeader_t*)rcvBuf;
     // printf("udpFillBuf addr is 0x%12" PRIx64 "\n", (uint64_t)udpFillBuf);
     uint32_t msgDataSize = *(uint32_t*)rcvBuf - FILE_XFR_HDR_SIZE;
-    if (udpHdr->msgSeq == 0)
+    if (udpHdr->pktSeq == 0)
     {
         fbOffs = 0;
         // 20200531: jcc allocating file buffer to correct file size for each
@@ -71,12 +72,12 @@ void AddToFwBuf(char rcvBuf[])
     // }
     memcpy(*udpFillBuf+fbOffs, &rcvBuf[FILE_XFR_HDR_SIZE], msgDataSize);
     fbOffs += msgDataSize;
-    // printf("msgSeq = %d, nMsgsTot = %d, fbOffs = %d, fileSize= %d\n",
-    //     udpHdr->msgSeq, udpHdr->nMsgsTot, fbOffs, udpHdr->totalSize);
-    if (udpHdr->msgSeq >= (udpHdr->nMsgsTot - 1))
+    // printf("pktSeq = %d, nPktsTot = %d, fbOffs = %d, fileSize= %d\n",
+    //     udpHdr->pktSeq, udpHdr->nPktsTot, fbOffs, udpHdr->totalSize);
+    if (udpHdr->pktSeq >= (udpHdr->nPktsTot - 1))
     {
         fwThreadInfo.fileBuf = *udpFillBuf;
-        fwThreadInfo.nBytes = udpHdr->totalSize;
+        fwThreadInfo.nBytes = udpHdr->nBytesMsg;
         //  signal file writer thread that data is ready
         const int signal_rv = pthread_cond_signal(&fwThreadInfo.condition);
         if (signal_rv)
@@ -131,7 +132,7 @@ void *fileWriterThread(void *data)
         struct tm *info;
         info = localtime(&rawtime);
         strftime(fileNameBuf, sizeof(fileName), "%Y%m%d_%H%M%S", info);
-        sprintf(fileName, "/home/jupjcc/udpcode/data/%s.bin", fileNameBuf);
+        sprintf(fileName, "/home/jupjcc/udpcode/data/rcv/%s.bin", fileNameBuf);
 
         //   write the file
         FILE *fptr;

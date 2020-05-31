@@ -1,0 +1,8 @@
+# list of files to be sent from client to server
+/home/jupjcc/udpcode/data/xmt/1mbuint32.bin
+/home/jupjcc/udpcode/data/xmt/flist.txt
+/home/jupjcc/udpcode/data/20200531_151016.bin
+
+
+
+

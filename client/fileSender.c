@@ -1,3 +1,4 @@
+#include "udpMsgDef.h"
 #include "fileSender.h"
 #include "cmdLineOpts.h"
 #include "threading.h"
@@ -70,31 +71,30 @@ void InitFileSender()
 
 int SendFile(char fileBuf[], int nFileBytes)
 {
-    struct FileXfrHeader_t *udpHdr;
-    udpHdr = malloc(FILE_XFR_HDR_SIZE);
+    struct FileXfrHeader_t udpHdr;
     uint32_t fileBufOffs = 0;
     //  each msg contains 4 byte msg len + 4 byte total size +
     //                    4 byte msg seq + 4 byte tot msgs in file
     int nMsgsData = (nFileBytes - 1) / MAX_UDP_MSG_BYTES + 1;
-    int nOverhead = 12 * nMsgsData;
-    // recalc nMsgsTot including msg overhead
+    int nOverhead = FILE_XFR_HDR_SIZE * nMsgsData;
+    // recalc nPktsTot including msg overhead
     nBytesRem = nMsgsData * MAX_UDP_MSG_BYTES + nOverhead;
-    udpHdr->nMsgsTot = (nBytesRem - 1) / MAX_UDP_MSG_BYTES + 1;
-    udpHdr->msgSeq = 0;
-    udpHdr->totalSize = nFileBytes;
+    udpHdr.nPktsTot = (nBytesRem - 1) / MAX_UDP_MSG_BYTES + 1;
+    udpHdr.pktSeq = 0;
+    udpHdr.nBytesMsg = nFileBytes;
     uint32_t nDataBytes;
 
     while (nBytesRem > 0)
     {
         if (nBytesRem > MAX_UDP_MSG_BYTES)
         {
-            udpHdr->msgSize = MAX_UDP_MSG_BYTES;
+            udpHdr.pktSize = MAX_UDP_MSG_BYTES;
         }
         else
         {
-           udpHdr->msgSize = nBytesRem;
+           udpHdr.pktSize = nBytesRem;
         }
-        nDataBytes = udpHdr->msgSize - FILE_XFR_HDR_SIZE;
+        nDataBytes = udpHdr.pktSize - FILE_XFR_HDR_SIZE;
         int msgOk = 0;
         //  tbd start retry loop
         size_t bufSize = 10;
@@ -105,7 +105,7 @@ int SendFile(char fileBuf[], int nFileBytes)
         int nRetries = 0;
         while (!msgOk)
         {
-            memcpy(msgBuf, udpHdr, FILE_XFR_HDR_SIZE);
+            memcpy(msgBuf, &udpHdr, FILE_XFR_HDR_SIZE);
             memcpy(&msgBuf[FILE_XFR_HDR_SIZE], &fileBuf[fileBufOffs], nDataBytes);
 
             // mutex_unlock() to enable reading of ACK
@@ -125,17 +125,23 @@ int SendFile(char fileBuf[], int nFileBytes)
             }
             ackTimeout.tv_sec += ACK_TIMEOUT_SEC;
             ackTimeout.tv_nsec = 0;
-            //  wait for reader thread to unlock mutex or timeout
-            sendto(sockfd, (const char *)msgBuf, udpHdr->msgSize, 
+            size_t nSent = sendto(sockfd, (const char *)msgBuf, udpHdr.pktSize, 
                 MSG_CONFIRM, (const struct sockaddr *) &servaddr, 
                 sizeof(servaddr));
+            if (nSent < 0)
+            {
+                printf("Error sending packet, errno= %d\n", errno);
+            }
+            //  wait for reader thread to unlock mutex or timeout
             const int timed_wait_rv =
                     pthread_cond_timedwait(&(ackThreadInfo.condition),
                                 &ackThreadInfo.mutex, &ackTimeout);   
             if (timed_wait_rv)
             {
                 error_pthread_cond_timedwait(timed_wait_rv);
-                exit(EXIT_FAILURE); 
+                printf("Timeout waiting for ack; pktSeq=%d/%d\n",
+                     udpHdr.pktSeq, udpHdr.nPktsTot);
+                //exit(EXIT_FAILURE); 
             }
             // const int join_rv = pthread_join(ackThreadInfo.id, NULL);
             // if (join_rv)
@@ -145,8 +151,8 @@ int SendFile(char fileBuf[], int nFileBytes)
             msgOk = 1;
         }       // end retry loop
         fileBufOffs += nDataBytes;
-        nBytesRem -= udpHdr->msgSize;
-        udpHdr->msgSeq++;
+        nBytesRem -= udpHdr.pktSize;
+        udpHdr.pktSeq++;
     }       // end while (nBytesRem > 0)  
 }
 

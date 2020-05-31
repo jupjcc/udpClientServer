@@ -1,12 +1,13 @@
 // Client side implementation of UDP client-server model 
+#include "fileList.h"
+#include "fileSender.h"
+#include "cmdLineOpts.h"
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <string.h> 
 #include <sys/types.h> 
 #include <sys/stat.h>
-#include "fileSender.h"
-#include "cmdLineOpts.h"
-#include "fileList.h"
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 { 
@@ -61,6 +62,7 @@ int main(int argc, char *argv[])
         printf("sending file %s of %d bytes:\n",
                 fileName, fileSize);
         SendFile(msgBuf, fileSize);         // fileSender
+        sleep(1);    // avoid duplicate output time stamp names
     }
     CloseUdp(); 
     return 0; 
