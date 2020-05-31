@@ -27,9 +27,7 @@ int main(int argc, char *argv[])
     printf("\n\nUdpRcv - Linux UDP server file receiver v20200527\n\n");
     if (argc < 2)
     {
-        printf("switches (preceded by - or / and followed by blank)\n");
-        printf("  -p  int    destination server port\n");
-        printf("  Example: UdpRcv -p 8080");
+		ShowCmdLineHelp();
         return 0;
     }
     ReadCmdLine(argc, argv);        // cmdLineOpts
@@ -89,7 +87,7 @@ int main(int argc, char *argv[])
 			//  send ACK msg
 			ssize_t nSent = sendto(sockfd, (const char *)&msgSeq, 4, 
 				MSG_CONFIRM, (const struct sockaddr *) &cliaddr, cliAddrLen);
-			printf("Received %d bytes, sent ACK of msg # %d\n", nRcv, msgSeq);
+			// printf("Received %d bytes, sent ACK of msg # %d\n", nRcv, msgSeq);
 			if (nSent < 0)
 			{
 				printf("Error sending ack, errno=%d\n", errno);

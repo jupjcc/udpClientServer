@@ -12,7 +12,6 @@
 #include <unistd.h> 
 #include <errno.h>
 
-
 #define MAX_UDP_MSG_BYTES 8972
 
 static int sockfd;
@@ -24,13 +23,9 @@ static int killAckRdr;
 static struct timespec ackTimeout;
 static struct thread_info_t ackThreadInfo;
 const int ACK_TIMEOUT_SEC = 1;
-static int ackTimedOut;
 
 static char msgBuf[MAX_UDP_MSG_BYTES];
-static uint32_t nMsgsTot;
 static uint32_t nBytesRem;
-static uint32_t msgSeq;
-
 
 void *ackReaderThread(void *data);
 
@@ -48,15 +43,6 @@ void InitFileSender()
     GetSvrIp(svrIp);
     servaddr.sin_addr.s_addr = inet_addr(svrIp);
     servaddr.sin_port = htons(GetSvrPort());
-    // struct timeval tv;
-    // tv.tv_sec = 1;
-    // tv.tv_usec = 0;
-    // if (setsockopt(sockfd, SOL_SOCKET,
-    //                         SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
-    // {
-    //     perror("Error setting UDP read timeout\n");
-    //     exit(EXIT_FAILURE); 
-    // }
 
     // create and start the ACK reader thread
     pthread_cond_init(&ackThreadInfo.condition, NULL);
@@ -80,110 +66,87 @@ void InitFileSender()
         error_pthread_mutex_unlock(unlock_rv);
         exit(EXIT_FAILURE); 
     }
-    // // The clock_gettime system call has higher precision than its successor the gettimeofday().
-    // // It has the ability to request specific clocks using the clock id.
-    // // It fills in a timespec structure with the seconds and nanosecond count of the time since the Epoch (00:00 1 January, 1970 UTC).
-    // // CLOCK_REALTIME argument represents a system-wide real-time clock. This clock is supported by all implementations and returns the number of seconds and nanoseconds since the Epoch.
-    // const int gettime_rv = clock_gettime(CLOCK_REALTIME, &ackTimeout);
-    // if (gettime_rv)
-    // {
-    //     error_clock_gettime(gettime_rv);
-    // }
-    // ackTimeout.tv_sec = ACK_TIMEOUT_SEC;
-    // ackTimeout.tv_nsec = 0;
 }
 
 int SendFile(char fileBuf[], int nFileBytes)
 {
+    struct FileXfrHeader_t *udpHdr;
+    udpHdr = malloc(FILE_XFR_HDR_SIZE);
     uint32_t fileBufOffs = 0;
-    //  each msg contains 4 byte msg len + 
+    //  each msg contains 4 byte msg len + 4 byte total size +
     //                    4 byte msg seq + 4 byte tot msgs in file
     int nMsgsData = (nFileBytes - 1) / MAX_UDP_MSG_BYTES + 1;
     int nOverhead = 12 * nMsgsData;
     // recalc nMsgsTot including msg overhead
-    nBytesRem = nMsgsTot * 12 + nFileBytes;
-    nMsgsTot = (nBytesRem - 1) / MAX_UDP_MSG_BYTES + 1;
-    msgSeq = 0;
+    nBytesRem = nMsgsData * MAX_UDP_MSG_BYTES + nOverhead;
+    udpHdr->nMsgsTot = (nBytesRem - 1) / MAX_UDP_MSG_BYTES + 1;
+    udpHdr->msgSeq = 0;
+    udpHdr->totalSize = nFileBytes;
     uint32_t nDataBytes;
 
     while (nBytesRem > 0)
     {
-        int nToSend;
         if (nBytesRem > MAX_UDP_MSG_BYTES)
         {
-            nToSend = MAX_UDP_MSG_BYTES;
+            udpHdr->msgSize = MAX_UDP_MSG_BYTES;
         }
         else
         {
-           nToSend = nBytesRem;
+           udpHdr->msgSize = nBytesRem;
         }
-        nDataBytes = nToSend - 12;
+        nDataBytes = udpHdr->msgSize - FILE_XFR_HDR_SIZE;
         int msgOk = 0;
         //  tbd start retry loop
-        int nsend = 1;
-        if (GetSingleStepDbg())        // command line option
+        size_t bufSize = 10;
+        // char *nsendstr = (char*)malloc(bufSize);
+        // printf("Press Enter to send another message");
+        // size_t len = getline(&nsendstr, &bufSize, stdin);
+        //free(nsendstr);
+        int nRetries = 0;
+        while (!msgOk)
         {
-            size_t bufSize = 10;
-            char *nsendstr = (char*)malloc(bufSize);
-            printf("Enter number of frames [1] to send: ");
-            size_t len = getline(&nsendstr, &bufSize, stdin);
-            if (strlen(nsendstr) > 1)
-            {
-                nsend = atoi(nsendstr);
-            }
-            free(nsendstr);
-            printf("\n");
-        }
-        int isend;
-        for (isend=0; isend<nsend; isend++)
-        {
-            int nRetries = 0;
-            while (!msgOk)
-            {
-                memcpy(msgBuf, &nToSend, 4);
-                memcpy(&msgBuf[4], &msgSeq, 4);
-                memcpy(&msgBuf[8],&nMsgsTot, 4);
-                memcpy(&msgBuf[12], &fileBuf[fileBufOffs], nDataBytes);
+            memcpy(msgBuf, udpHdr, FILE_XFR_HDR_SIZE);
+            memcpy(&msgBuf[FILE_XFR_HDR_SIZE], &fileBuf[fileBufOffs], nDataBytes);
 
-                sendto(sockfd, (const char *)msgBuf, nToSend, 
-                    MSG_CONFIRM, (const struct sockaddr *) &servaddr, 
-                    sizeof(servaddr));
-                // The clock_gettime system call has higher precision than its successor the gettimeofday().
-                // It has the ability to request specific clocks using the clock id.
-                // It fills in a timespec structure with the seconds and nanosecond count of the time since the Epoch (00:00 1 January, 1970 UTC).
-                // CLOCK_REALTIME argument represents a system-wide real-time clock. This clock is supported by all implementations and returns the number of seconds and nanoseconds since the Epoch.
-                const int gettime_rv = clock_gettime(CLOCK_REALTIME, &ackTimeout);
-                if (gettime_rv)
-                {
-                    error_clock_gettime(gettime_rv);
-                }
-                ackTimeout.tv_sec = time(NULL) + ACK_TIMEOUT_SEC;
-                ackTimeout.tv_nsec = 0;
-                ackTimedOut = 0;
-                //  wait for reader thread to unlock mutex or timeout
-                const int timed_wait_rv =
-                        pthread_cond_timedwait(&ackThreadInfo.condition,
-                                    &ackThreadInfo.mutex, &ackTimeout);   
-                if (timed_wait_rv)
-                {
-                    error_pthread_cond_timedwait(timed_wait_rv);
-                    exit(EXIT_FAILURE); 
-                }
-                const int join_rv = pthread_join(ackThreadInfo.id, NULL);
-                if (join_rv)
-                {
-                    error_pthread_join(join_rv);
-                }
-                if (ackTimedOut)
-                {
-                    return 0;
-                }
-                msgOk = 1;
-            }       // end retry loop
-        }       // 
+            // mutex_unlock() to enable reading of ACK
+            const int unlock_rv = pthread_mutex_unlock(&ackThreadInfo.mutex);
+            if (unlock_rv)
+            {
+                error_pthread_mutex_unlock(unlock_rv);
+            }
+            // The clock_gettime system call has higher precision than its successor the gettimeofday().
+            // It has the ability to request specific clocks using the clock id.
+            // It fills in a timespec structure with the seconds and nanosecond count of the time since the Epoch (00:00 1 January, 1970 UTC).
+            // CLOCK_REALTIME argument represents a system-wide real-time clock. This clock is supported by all implementations and returns the number of seconds and nanoseconds since the Epoch.
+            const int gettime_rv = clock_gettime(CLOCK_REALTIME, &ackTimeout);
+            if (gettime_rv)
+            {
+                error_clock_gettime(gettime_rv);
+            }
+            ackTimeout.tv_sec += ACK_TIMEOUT_SEC;
+            ackTimeout.tv_nsec = 0;
+            //  wait for reader thread to unlock mutex or timeout
+            sendto(sockfd, (const char *)msgBuf, udpHdr->msgSize, 
+                MSG_CONFIRM, (const struct sockaddr *) &servaddr, 
+                sizeof(servaddr));
+            const int timed_wait_rv =
+                    pthread_cond_timedwait(&(ackThreadInfo.condition),
+                                &ackThreadInfo.mutex, &ackTimeout);   
+            if (timed_wait_rv)
+            {
+                error_pthread_cond_timedwait(timed_wait_rv);
+                exit(EXIT_FAILURE); 
+            }
+            // const int join_rv = pthread_join(ackThreadInfo.id, NULL);
+            // if (join_rv)
+            // {
+            //     error_pthread_join(join_rv);
+            // }
+            msgOk = 1;
+        }       // end retry loop
         fileBufOffs += nDataBytes;
-        nBytesRem -= nToSend;
-        msgSeq++;
+        nBytesRem -= udpHdr->msgSize;
+        udpHdr->msgSeq++;
     }       // end while (nBytesRem > 0)  
 }
 
@@ -227,7 +190,7 @@ void *ackReaderThread(void *data)
     killAckRdr = 0;
     while (!killAckRdr)
     {
-        int nRcv = recv(sockfd, (char *)&ackbuf, 4096, 0); 
+        int nRcv = recv(sockfd, (char *)&ackbuf, 1024, 0); 
         // int nRcv = recvfrom(sockfd, (char *)&ackbuf, sizeof(ackbuf), 
         //             0, ackAddr, &ackLen); 
         if (nRcv < 0)
